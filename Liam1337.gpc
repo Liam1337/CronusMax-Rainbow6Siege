@@ -1,0 +1,199 @@
+define VERTICLE = 9; 
+define LEFT = 0;
+define RIGHT = 0; 
+define FRAG_COOK_TIME = 0xEFB; 
+define SCAN_TIME = 0x200;
+define LEAN_TIME = 0x2F; 
+define CROUCH_TIME = 7;
+define AUTOLEAN_AMOUNT = 1;
+
+
+int flashActive;
+int crouchActive;
+int qeSpam;
+int rapidFire;
+int recoilActive;
+int autoScan;
+int autoLean;
+int rapidHip = FALSE; 
+int scanActive = FALSE; 
+int flipTriggers = FALSE; 
+int impactActive = FALSE; 
+int hairTriggers = FALSE; 
+int rapidBindActive = TRUE; 
+
+
+int colourID;
+int bind;
+int flashColourID;
+
+
+int ARv;
+int ARl;
+int ARr;
+int leanPos; 
+int first;	 
+int second;	 
+
+define COLOUR_OFF = 0x1;
+define COLOUR_BLUE = 0x2;
+define COLOUR_RED = 0x3;
+define COLOUR_GREEN = 0x4;
+define COLOUR_PINK = 0x5;
+define COLOUR_CYAN = 0x6;
+define COLOUR_YELLOW = 0x7;
+define COLOUR_WHITE = 0x8;
+
+define LEAN_NONE = 0;
+define LEAN_LEFT = 0x1;
+define LEAN_RIGHT = 0x2;
+
+data (1,0,0,0,0,2,0,0,0,0,2,0,0,0,0,2,0,0,0,0,2,2,0,2,0,0,2,2,0,2,2,2,2);
+
+function set(id,val){set_val(id,val);} 
+									   
+									   
+function unset(id){set_val(id, 0);} 
+								
+function get(id){return get_val(id);} 
+									  
+function press(id){return event_press(id);} 
+											
+function release(id){return event_release(id);} 
+												
+function trace(id,val){if(id>0&&id<7){set(0x1D+id,val);}}
+														 
+														
+function colourLED(int colour){
+	colourID = (colour*4) - 3;
+	reset_leds();
+	set_led(0, dbyte(colourID));
+	set_led(1, dbyte(colourID + 1));
+	set_led(2, dbyte(colourID + 2));
+	set_led(3, dbyte(colourID + 3));
+}
+
+function isADS(){ 
+	return get(0x7) == 0x64 && get_ptime(0x7) >= 30;
+}
+
+function perfect_impact_nade(){ 
+	if(get(0x6) && get_ptime(0x6) >= FRAG_COOK_TIME){
+		unset(0x6);
+	}
+}
+
+function hairTrigger(){
+	if(get(0x7)){set(0x7, 0x64);}
+	if(get(0x4)){set(0x4, 0x64);}
+}
+
+function toggleLED(int event, int onC, int offC){
+	if(event){colourLED(onC);return;}
+	colourLED(offC);return;
+}
+
+init{
+	first=0x8;second=0x5;
+}
+
+main{
+	trace(1, crouchActive); trace(2, rapidFire); trace(3, recoilActive); trace(4, qeSpam); trace(5, autoScan); trace(6, autoLean);
+	if(flipTriggers){swap(0x4, 0x3);swap(0x7, 0x6);}
+	if(!isADS()){leanPos=LEAN_NONE;}
+	if(isADS()){if(press(0x8) && (leanPos != LEAN_LEFT || leanPos == LEAN_NONE)){leanPos=LEAN_LEFT;first=0x5;second=0x8;}if(press(0x5) && (leanPos != LEAN_RIGHT || leanPos == LEAN_NONE)){leanPos=LEAN_RIGHT;first=0x8;second=0x5;}}
+	if((press(0x8) && leanPos == LEAN_LEFT) || (press(0x5) && leanPos == LEAN_RIGHT)){leanPos=LEAN_NONE;}
+	if(hairTriggers) hairTrigger();
+	if(impactActive) perfect_impact_nade();
+	if(isADS() && press(0xE)){ bind=0xE; crouchActive = !crouchActive; if(combo_running(flash)){combo_stop(flash);flashActive=FALSE;}toggleLED(crouchActive, COLOUR_PINK, COLOUR_WHITE);} 
+	if(crouchActive && get(0x4)){combo_run(crouchSpam); }
+	if(press(0xD)){ if(!isADS() && rapidBindActive){bind=0xD;}rapidFire=!rapidFire; if(combo_running(flash)){combo_stop(flash);flashActive=FALSE;} toggleLED(rapidFire, COLOUR_GREEN, COLOUR_RED);} 
+	if(rapidFire && get(4)){if(isADS() || !rapidHip){combo_run(adsRapid);}if(rapidHip && !isADS()){combo_run(hipRapid);}}
+	if(isADS() && press(0x10)){ bind=0x10;recoilActive=!recoilActive; if(combo_running(flash)){combo_stop(flash);flashActive=FALSE;} toggleLED(recoilActive, COLOUR_CYAN, COLOUR_OFF);} 
+	if(recoilActive && get(0x4)){combo_run(recoilAssist);}
+	if(isADS() && press(1)){ bind = 1; qeSpam=!qeSpam; if(combo_running(flash)){combo_stop(flash);flashActive=FALSE;} toggleLED(qeSpam, COLOUR_YELLOW, COLOUR_BLUE);} 
+	if(qeSpam && isADS() && get(0x4)){combo_run(qe);}
+	if(combo_running(qe) && (!isADS() || release(0x4))){combo_stop(qe);}
+	if(scanActive){if(get(0x11) && get_ptime(0x11) >= SCAN_TIME){autoScan=TRUE;}} 
+	if(autoScan){combo_run(autoScan);flashColourID=COLOUR_YELLOW;flashActive=TRUE;combo_run(flash);}
+	if(autoScan && (press(0xE) || press(0x12))){combo_stop(autoScan);autoScan=FALSE;flashActive=FALSE;colourLED(COLOUR_BLUE);} 
+	if(isADS() && press(0x2)){bind = 2; autoLean=!autoLean;if(autoLean){flashColourID=COLOUR_BLUE;flashActive=TRUE;}if(!autoLean){flashActive=FALSE;}}
+	if(autoLean && flashActive){combo_run(flash);}
+	if(autoLean){if(isADS() && abs(get(11)) > AUTOLEAN_AMOUNT){if(get_val(11) < 0){if(!get(8)){set(8, 100);}}else{if(!get(5))set(5, 100);}}}
+	if(bind){if(release(bind)){bind = 0;}else{unset(bind);}}
+}
+
+
+combo adsRapid{
+    set_val(PS4_R2, 100);
+    wait(10);
+    set_val(PS4_R2, 0);
+    wait(10);
+    set_val(PS4_R2, 0);
+}
+
+
+combo hipRapid{
+    set_val(PS4_R2, 100);
+    wait(10);
+    set_val(PS4_R2, 0);
+    wait(10);
+    set_val(PS4_R2, 0);
+}
+
+
+
+combo flash{
+	set_ledx(-1, 0);
+	wait(120);
+	colourLED(flashColourID);
+	wait(80);
+	reset_leds();
+}
+
+combo autoScan{
+	set(0x11, 0x64);
+	wait(SCAN_TIME);
+	unset(0x11);
+	wait(0x1);
+	unset(0x11);
+	wait(0x1);
+}
+
+
+combo qe{
+	set(first, 0x64);
+	wait(0x96);
+	unset(first);
+	wait(LEAN_TIME);
+	set_val(second, 0x64);
+	wait(0x96);
+	unset(second);
+	wait(LEAN_TIME);
+	set_val(first, 0x64);
+	wait(0x96);
+	unset(first);
+	wait(LEAN_TIME);
+	set_val(second, 0x64);
+	wait(0x96);
+	unset(second);
+}
+
+combo crouchSpam{
+	set(0x12, 0x64);
+	wait(CROUCH_TIME);
+	unset(0x12);
+	wait(CROUCH_TIME);
+	unset(0x12);
+	wait(0x46);
+}
+
+
+combo recoilAssist{ 
+	ARv = get(0xA)+VERTICLE;
+    if(ARv > 0x64) ARv = 0x64;set(0xA, ARv);
+    ARl = get(0x9)-LEFT;
+    if(ARl > 0x64) ARl = 0x64;set(0x9, ARl);
+    ARr = get(0x9)+RIGHT;
+    if(ARr > 0x64) ARr = 0x64;set(0x9, ARr);
+}
